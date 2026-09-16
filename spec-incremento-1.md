@@ -12,7 +12,7 @@ Esta especificación no parte de cero. Cada afirmación de las secciones "Proble
 
 **Lo que este spec NO usa como fuente**, aunque existan en el proyecto:
 
-- `ARQUITECTURA.pdf` y `DIAGRAMA_UML.pdf` — son propuestas del equipo, **no validadas**. Se mencionan en OPEN-004 únicamente como antecedente a considerar, no como restricción de este incremento. Tratarlas como fuente autoritativa aquí violaría la regla de evidencia de `constitution.md` (sección 7): ningún artefacto de diseño previo es válido por el solo hecho de existir.
+- `ARQUITECTURA.pdf` y `DIAGRAMA_UML.pdf` — son propuestas del equipo, **no validadas**. Se mencionan únicamente como antecedente a considerar en Plan, no como restricción de este incremento. Tratarlas como fuente autoritativa aquí violaría la regla de evidencia de `constitution.md` (sección 7): ningún artefacto de diseño previo es válido por el solo hecho de existir.
 
 ## Problema
 
@@ -35,7 +35,7 @@ Este es el primer eslabón de la estrategia incremental ya definida para el proy
 
 - Detección de cualquier violación SOLID o code smell.
 - Cualquier llamada a un LLM.
-- Soporte multi-lenguaje.
+- Soporte multi-lenguaje (la *extensibilidad* hacia otros lenguajes sí es un driver arquitectónico de este incremento — ver `architecture-drivers-incremento-1.md`, ASR-001 — pero implementar un segundo lenguaje no lo es).
 - Interfaz de usuario.
 - Dataset de validación con gold standard (eso es el incremento siguiente de la secuencia).
 
@@ -44,17 +44,17 @@ Este es el primer eslabón de la estrategia incremental ya definida para el proy
 ### REQ-001 Parsing de archivos fuente
 **Contexto:** el sistema recibe la ruta de un repositorio local de **Python**.
 **Evento/condición:** se ejecuta el proceso de ingestión sobre esa ruta.
-**Comportamiento esperado:** el sistema identifica todos los archivos `.py` y los parsea sin error para el subconjunto de sintaxis Python válida (según la gramática Python que soporte Tree-sitter).
+**Comportamiento esperado:** el sistema identifica todos los archivos `.py` y los parsea sin error para el subconjunto de sintaxis Python válida (según la versión de Python objetivo — ver DEC-005).
 **Criterio de aceptación:** dado un repositorio de prueba conocido, el número de clases y métodos extraídos coincide con un conteo manual de referencia.
 
 ### REQ-002 Extracción de estructura
 **Contexto:** un archivo `.py` fue parseado correctamente.
-**Comportamiento esperado:** el sistema extrae clase(s), método(s) por clase, y relaciones de herencia declaradas explícitamente — **incluyendo herencia múltiple**, ya que Python la permite de forma nativa (`class C(A, B):`), a diferencia de lenguajes de herencia simple como Java.
-**Criterio de aceptación:** la estructura extraída es serializable (JSON) y reproducible — correr el proceso dos veces sobre el mismo repo produce el mismo resultado.
+**Comportamiento esperado:** el sistema extrae clase(s), método(s) por clase, y relaciones de herencia declaradas explícitamente — **incluyendo herencia múltiple**, ya que Python la permite de forma nativa (`class C(A, B):`), a diferencia de lenguajes de herencia simple como Java. Cada elemento estructural extraído que pueda convertirse posteriormente en evidencia (clase, método) **debe conservar una referencia inequívoca a su archivo fuente y una ubicación suficiente (línea, y cuando aplique columna) para poder vincularlo con evidencia del código más adelante** — ver `architecture-drivers-incremento-1.md`, ASR-004.
+**Criterio de aceptación:** la estructura extraída es serializable (JSON), reproducible — correr el proceso dos veces sobre el mismo repo produce una representación canónicamente equivalente — y cada clase/método extraído tiene archivo + línea asociados.
 
 ### REQ-003 Manejo de errores de parsing
 **Contexto:** un archivo no puede parsearse (sintaxis inválida, encoding no soportado, etc.).
-**Comportamiento esperado:** el sistema registra el archivo como no procesado, con la razón, y continúa con el resto del repositorio — un archivo roto no detiene la ingestión completa.
+**Comportamiento esperado:** el sistema registra el archivo como no procesado, con la razón, y continúa con el resto del repositorio — un archivo roto no detiene la ingestión completa. Un archivo se considera "no procesado" si contiene cualquier error sintáctico, independientemente de si el parser elegido es capaz de producir un árbol parcial para ese archivo (ver `architecture-drivers-incremento-1.md`, ASR-003 y su política de recuperación parcial).
 **Criterio de aceptación:** un repositorio de prueba con al menos un archivo corrupto termina el proceso y reporta ese archivo como fallido, sin abortar los demás.
 
 ## Casos límite
@@ -68,7 +68,7 @@ Este es el primer eslabón de la estrategia incremental ya definida para el proy
 
 ## Preguntas abiertas
 
-Ninguna pendiente. Las cuatro preguntas originales quedaron resueltas como DEC-001 a DEC-004 (ver sección Decisiones).
+Ninguna pendiente. Las preguntas originales quedaron resueltas como DEC-001 a DEC-005 (ver sección Decisiones).
 
 ## Decisiones
 
@@ -76,7 +76,8 @@ Ninguna pendiente. Las cuatro preguntas originales quedaron resueltas como DEC-0
 - **DEC-002** — Tipo de repositorio de prueba: repo pequeño real de código abierto, **en Python**. La selección del repositorio específico se hace en Tasks — no bloquea el cierre de Specify.
 - **DEC-003** — Lenguaje del código analizado ("paciente"): **Python**. Coherente con el stack de backend sugerido en `ARQUITECTURA.pdf` (LangGraph) y con la formación técnica del equipo (master context, sección 86). *Resuelve OPEN-001.*
 - **DEC-004** — `ABC`/`Protocol` (equivalentes Python de "interfaz") se **excluyen** de la relación de herencia contada en este incremento; se tratan igual que herencia de clase normal, sin lógica especial. Se revisa en el incremento 2 si hace falta distinguirlas. *Resuelve OPEN-003.*
+- **DEC-005** — Versión de Python objetivo: **3.14+** (última serie estable disponible al momento de esta decisión — 16 de septiembre de 2026; verificado: 3.14.7 es la última estable, 3.15 está en release candidate con lanzamiento final programado para el 1 de octubre de 2026). Se evaluará ampliar el soporte a 3.15 una vez esté disponible como estable, dado lo cercano de esa fecha. Bloqueaba Architecture Synthesis; queda resuelta aquí.
 
 ## Definition of done
 
-REQ-001 a REQ-003 tienen evidencia verificable (criterios de aceptación cumplidos) y no quedan OPEN de severidad alta sin resolver. **Cumplida a nivel de especificación: las cuatro preguntas abiertas están resueltas (DEC-001 a DEC-004). Pendiente únicamente la evidencia de ejecución real (Test Gate), que llega en Implement.**
+REQ-001 a REQ-003 tienen evidencia verificable (criterios de aceptación cumplidos) y no quedan OPEN de severidad alta sin resolver. **Cumplida a nivel de especificación: todas las preguntas abiertas están resueltas (DEC-001 a DEC-005). Pendiente únicamente la evidencia de ejecución real (Test Gate), que llega en Implement.**
